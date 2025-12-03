@@ -1,0 +1,5 @@
+build
+dependencies.lock
+.vscode
+.clangd
+framework/morseframework/*.mbin.o
