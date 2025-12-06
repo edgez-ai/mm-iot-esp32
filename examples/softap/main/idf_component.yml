@@ -1,0 +1,11 @@
+# Copyright 2023 Morse Micro
+# SPDX-License-Identifier: Apache-2.0
+dependencies:
+  mmutils:
+    path: ../../../framework/src/mmutils
+  morselib:
+    path: ../../../framework/morselib
+  mm_shims:
+    path: ../../../framework/mm_shims
+  mmipal:
+    path: ../../../framework/src/mmipal

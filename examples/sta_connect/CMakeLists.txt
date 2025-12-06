@@ -11,7 +11,12 @@ message(STATUS "MMIOT_ROOT: $ENV{MMIOT_ROOT}")
 if(DEFINED COUNTRY_CODE)
     message (Using country code: ${COUNTRY_CODE})
     add_compile_definitions(COUNTRY_CODE="${COUNTRY_CODE}")
+else()
+    message (Using default country code: US)
+    add_compile_definitions(COUNTRY_CODE="US")
 endif()
+
+add_compile_definitions(LWIP_NETIF_LINK_CALLBACK=1)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(sta_connect)

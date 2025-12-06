@@ -21,27 +21,24 @@
 #include "mm_app_regdb.h"
 
 
-// #define COUNTRY_CODE "AU"
-#ifndef COUNTRY_CODE
-#error COUNTRY_CODE must be defined to the appropriate 2 character country code. \
-       See mm_app_regdb.c for valid options.
-#endif
+ #define COUNTRY_CODE "US"
+
 
 #ifndef COUNTRY_CODE
-#define COUNTRY_CODE "??"
+#define COUNTRY_CODE "US"
 #endif
 
 /* Default SSID  */
 #ifndef SSID
 /** SSID of the AP to connect to. (Do not quote; it will be stringified.) */
-#define SSID                            MorseMicro
+#define SSID                            HT-H7608-F97F
 #endif
 
 /* Default passphrase  */
 #ifndef SAE_PASSPHRASE
 /** Passphrase of the AP (ignored if security type is not SAE).
  *  (Do not quote; it will be stringified.) */
-#define SAE_PASSPHRASE                  12345678
+#define SAE_PASSPHRASE                  heltec.org
 #endif
 
 /* Default security type  */
@@ -52,7 +49,7 @@
 
 /* Configure the STA to use DHCP, this overrides any static configuration.
  * If the @c ip.dhcp_enabled is set in the config store that will take priority */
-// #define ENABLE_DHCP                     (1)
+#define ENABLE_DHCP                     (1)
 
 /* Static Network configuration */
 #ifndef STATIC_LOCAL_IP
