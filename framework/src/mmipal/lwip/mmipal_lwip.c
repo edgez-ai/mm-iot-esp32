@@ -10,6 +10,8 @@
 #include "mmosal.h"
 #include "mmutils.h"
 
+#include <string.h>
+
 #include "lwip/api.h"
 #include "lwip/autoip.h"
 #include "lwip/def.h"
@@ -66,6 +68,65 @@ static uint32_t s_mmipal_init_start_ms = 0;
 #define MMIPAL_TIMING_PRINTF(...) do {} while (0)
 #endif
 
+static const char *mmipal_link_state_to_str(enum mmipal_link_state state)
+{
+    switch (state)
+    {
+    case MMIPAL_LINK_DOWN:
+        return "DOWN";
+    case MMIPAL_LINK_UP:
+        return "UP";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+static void mmipal_log_netif_state(const char *reason, const struct netif *netif,
+                                   enum mmipal_link_state ip_link_state)
+{
+    char ip[IPADDR_STRLEN_MAX] = {0};
+    char netmask[IPADDR_STRLEN_MAX] = {0};
+    char gateway[IPADDR_STRLEN_MAX] = {0};
+
+    if (netif == NULL)
+    {
+        printf("mmipal: %s netif=NULL\n", reason);
+        return;
+    }
+
+#if LWIP_IPV4
+    if (ipaddr_ntoa_r(&netif->ip_addr, ip, sizeof(ip)) == NULL)
+    {
+        strcpy(ip, "<err>");
+    }
+    if (ipaddr_ntoa_r(&netif->netmask, netmask, sizeof(netmask)) == NULL)
+    {
+        strcpy(netmask, "<err>");
+    }
+    if (ipaddr_ntoa_r(&netif->gw, gateway, sizeof(gateway)) == NULL)
+    {
+        strcpy(gateway, "<err>");
+    }
+#else
+    strcpy(ip, "n/a");
+    strcpy(netmask, "n/a");
+    strcpy(gateway, "n/a");
+#endif
+
+    printf("mmipal: %s netif=%c%c%u flags=0x%02x link_up=%u netif_up=%u ip_link_state=%s ip=%s nm=%s gw=%s\n",
+           reason,
+           netif->name[0],
+           netif->name[1],
+           netif->num,
+           (unsigned)netif->flags,
+           (unsigned)netif_is_link_up(netif),
+           (unsigned)netif_is_up(netif),
+           mmipal_link_state_to_str(ip_link_state),
+           ip,
+           netmask,
+           gateway);
+}
+
 /** Getter function to retrieve the global mmipal data structure.*/
 static inline struct mmipal_data *mmipal_get_data(void)
 {
@@ -96,6 +157,21 @@ static void mmipal_dhcp_lease_updated(const struct mmwlan_dhcp_lease_info *lease
     ip4_addr_set_u32(&netmask, lease_info->mask4_addr);
     ip4_addr_set_u32(&gateway, lease_info->gw4_addr);
     ip4_addr_set_u32(ip_2_ip4(&dns_addr), lease_info->dns4_addr);
+
+    {
+        char ip_buf[IPADDR_STRLEN_MAX] = {0};
+        char netmask_buf[IPADDR_STRLEN_MAX] = {0};
+        char gateway_buf[IPADDR_STRLEN_MAX] = {0};
+        char dns_buf[IPADDR_STRLEN_MAX] = {0};
+
+        ip4addr_ntoa_r(&ip_addr, ip_buf, sizeof(ip_buf));
+        ip4addr_ntoa_r(&netmask, netmask_buf, sizeof(netmask_buf));
+        ip4addr_ntoa_r(&gateway, gateway_buf, sizeof(gateway_buf));
+        ip4addr_ntoa_r(ip_2_ip4(&dns_addr), dns_buf, sizeof(dns_buf));
+
+        printf("mmipal: DHCP offload lease updated ip=%s mask=%s gw=%s dns=%s\n",
+               ip_buf, netmask_buf, gateway_buf, dns_buf);
+    }
 
     LOCK_TCPIP_CORE();
     netif_set_addr(&data->lwip_mmnetif, &ip_addr, &netmask, &gateway);
@@ -179,6 +255,13 @@ enum mmipal_status mmipal_set_ip_config(const struct mmipal_ip_config *config)
 
     LOCK_TCPIP_CORE();
 
+        printf("mmipal: set_ip_config mode=%d ip=%s netmask=%s gw=%s (prev_mode=%d)\n",
+            (int)config->mode,
+            config->ip_addr,
+            config->netmask,
+            config->gateway_addr,
+            (int)data->ip4_mode);
+
     if (config->mode != MMIPAL_DHCP && data->ip4_mode == MMIPAL_DHCP)
     {
         /* Stop DHCP if it was started earlier before setting static IP */
@@ -195,6 +278,7 @@ enum mmipal_status mmipal_set_ip_config(const struct mmipal_ip_config *config)
     }
 
     UNLOCK_TCPIP_CORE();
+    mmipal_log_netif_state("after mmipal_set_ip_config", netif, data->ip_link_state);
     return MMIPAL_SUCCESS;
 }
 
@@ -414,6 +498,8 @@ static void netif_status_callback(struct netif *netif)
         new_link_state = MMIPAL_LINK_UP;
     }
 
+    mmipal_log_netif_state("netif_status_callback", netif, new_link_state);
+
     if (data->ip_link_state != new_link_state)
     {
         data->ip_link_state = new_link_state;
@@ -512,6 +598,7 @@ static void tcpip_init_done_handler(void *arg)
                          (unsigned long)(mmosal_get_time_ms() - cb_start_ms));
     netif_set_default(netif);
     netif_set_up(netif);
+    mmipal_log_netif_state("after netif_set_up", netif, data->ip_link_state);
 
 #if LWIP_IPV4
     err_t result;
@@ -520,11 +607,13 @@ static void tcpip_init_done_handler(void *arg)
     {
         result = dhcp_start(netif);
         LWIP_ASSERT("DHCP start error", result == ERR_OK);
+        printf("mmipal: DHCP start requested on netif %c%c%u\n", netif->name[0], netif->name[1], netif->num);
     }
     else if (args->mode == MMIPAL_STATIC)
     {
         netif_set_addr(netif, ip_2_ip4(&(args->ip_addr)),
                        ip_2_ip4(&(args->netmask)), ip_2_ip4(&(args->gateway_addr)));
+        mmipal_log_netif_state("after static IPv4 set", netif, data->ip_link_state);
     }
 #endif
 
@@ -586,6 +675,16 @@ enum mmipal_status mmipal_init(const struct mmipal_init_args *args)
     memset(lwip_args, 0, sizeof(*lwip_args));
     lwip_args->mode = args->mode;
     lwip_args->ip6_mode = args->ip6_mode;
+
+        printf("mmipal: init args mode=%d ip=%s netmask=%s gw=%s ip6_mode=%d ip6=%s offload_arp_response=%u offload_arp_refresh_s=%lu\n",
+            (int)args->mode,
+            args->ip_addr,
+            args->netmask,
+            args->gateway_addr,
+            (int)args->ip6_mode,
+            args->ip6_addr,
+            (unsigned)args->offload_arp_response,
+            (unsigned long)args->offload_arp_refresh_s);
 
     data->link_status_callback = NULL;
 
@@ -732,6 +831,7 @@ static enum mmipal_status mmipal_get_local_addr_(ip_addr_t *local_addr, const ip
         const ip_addr_t *src_addr = ip6_select_source_address(netif, ip_2_ip6(dest_addr));
         if (src_addr == NULL)
         {
+            printf("mmipal: no IPv6 local source address for destination\n");
             return MMIPAL_NO_LINK;
         }
         ip_addr_copy(*local_addr, *src_addr);
@@ -746,6 +846,10 @@ static enum mmipal_status mmipal_get_local_addr_(ip_addr_t *local_addr, const ip
 #if LWIP_IPV4
     if (IP_IS_V4(dest_addr))
     {
+        if (ip_addr_isany_val(netif->ip_addr))
+        {
+            printf("mmipal: IPv4 local address not ready yet (netif ip is 0.0.0.0)\n");
+        }
         ip_addr_copy(*local_addr, netif->ip_addr);
         return MMIPAL_SUCCESS;
     }
