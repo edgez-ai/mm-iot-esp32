@@ -54,6 +54,18 @@ static struct mmipal_data
 #endif
 } mmipal_data = {};
 
+static uint32_t s_mmipal_init_start_ms = 0;
+
+#ifndef MMIPAL_TIMING_LOG
+#define MMIPAL_TIMING_LOG 0
+#endif
+
+#if MMIPAL_TIMING_LOG
+#define MMIPAL_TIMING_PRINTF(...) printf(__VA_ARGS__)
+#else
+#define MMIPAL_TIMING_PRINTF(...) do {} while (0)
+#endif
+
 /** Getter function to retrieve the global mmipal data structure.*/
 static inline struct mmipal_data *mmipal_get_data(void)
 {
@@ -376,6 +388,9 @@ static void netif_status_callback(struct netif *netif)
 {
     struct mmipal_data *data = mmipal_get_data();
     enum mmipal_link_state new_link_state = MMIPAL_LINK_DOWN;
+#if MMIPAL_TIMING_LOG
+    uint32_t now_ms = mmosal_get_time_ms();
+#endif
 
 #if LWIP_IPV4
     if (data->ip4_mode == MMIPAL_DHCP_OFFLOAD)
@@ -402,6 +417,10 @@ static void netif_status_callback(struct netif *netif)
     if (data->ip_link_state != new_link_state)
     {
         data->ip_link_state = new_link_state;
+        MMIPAL_TIMING_PRINTF("mmipal_timing: link_state=%s at %lu ms (since mmipal_init start: %lu ms)\n",
+                     (new_link_state == MMIPAL_LINK_UP) ? "UP" : "DOWN",
+                     (unsigned long)now_ms,
+                     (unsigned long)(now_ms - s_mmipal_init_start_ms));
 
         if (data->link_status_callback || data->ext_link_status_callback)
         {
@@ -480,8 +499,17 @@ static void tcpip_init_done_handler(void *arg)
     struct mmipal_data *data = mmipal_get_data();
     struct netif *netif = &data->lwip_mmnetif;
     struct lwip_init_args *args = (struct lwip_init_args *)arg;
+#if MMIPAL_TIMING_LOG
+    uint32_t cb_start_ms = mmosal_get_time_ms();
+#endif
+
+    MMIPAL_TIMING_PRINTF("mmipal_timing: tcpip_init_done_handler start at %lu ms (+%lu ms from mmipal_init)\n",
+                         (unsigned long)cb_start_ms,
+                         (unsigned long)(cb_start_ms - s_mmipal_init_start_ms));
 
     netif_add_noaddr(netif, NULL, mmnetif_init, tcpip_input);
+    MMIPAL_TIMING_PRINTF("mmipal_timing: netif_add_noaddr done in %lu ms\n",
+                         (unsigned long)(mmosal_get_time_ms() - cb_start_ms));
     netif_set_default(netif);
     netif_set_up(netif);
 
@@ -532,6 +560,9 @@ static void tcpip_init_done_handler(void *arg)
     mmosal_free(args);
 
     tcpip_init_done = true;
+    MMIPAL_TIMING_PRINTF("mmipal_timing: tcpip_init_done_handler complete in %lu ms (total +%lu ms from mmipal_init)\n",
+                         (unsigned long)(mmosal_get_time_ms() - cb_start_ms),
+                         (unsigned long)(mmosal_get_time_ms() - s_mmipal_init_start_ms));
 }
 
 enum mmipal_status mmipal_init(const struct mmipal_init_args *args)
@@ -541,6 +572,11 @@ enum mmipal_status mmipal_init(const struct mmipal_init_args *args)
     int result;
 
     struct lwip_init_args *lwip_args = (struct lwip_init_args *)mmosal_malloc(sizeof(*lwip_args));
+    s_mmipal_init_start_ms = mmosal_get_time_ms();
+    MMIPAL_TIMING_PRINTF("mmipal_timing: mmipal_init start at %lu ms (mode=%d ip6_mode=%d)\n",
+                         (unsigned long)s_mmipal_init_start_ms,
+                         (int)args->mode,
+                         (int)args->ip6_mode);
     if (lwip_args == NULL)
     {
         printf("malloc failure\n");
@@ -642,12 +678,17 @@ enum mmipal_status mmipal_init(const struct mmipal_init_args *args)
 #endif
 
     tcpip_init(tcpip_init_done_handler, lwip_args);
+        MMIPAL_TIMING_PRINTF("mmipal_timing: tcpip_init invoked at +%lu ms\n",
+                             (unsigned long)(mmosal_get_time_ms() - s_mmipal_init_start_ms));
 
     /* Block until initialisation is complete */
     while (!tcpip_init_done)
     {
         mmosal_task_sleep(10);
     }
+
+        MMIPAL_TIMING_PRINTF("mmipal_timing: mmipal_init complete in %lu ms\n",
+                             (unsigned long)(mmosal_get_time_ms() - s_mmipal_init_start_ms));
 
     return MMIPAL_SUCCESS;
 

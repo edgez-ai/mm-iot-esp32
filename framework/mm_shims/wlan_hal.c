@@ -16,6 +16,9 @@
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
 #include "driver/spi_common.h"
+#include "esp_timer.h"
+#include "esp_log.h"
+static const char *WLAN_HAL_TAG = "wlan_hal_timing";
 
 /** 10x8bit training seq */
 #define BYTE_TRAIN 16
@@ -27,6 +30,13 @@ static mmhal_irq_handler_t spi_irq_handler = NULL;
 static mmhal_irq_handler_t busy_irq_handler = NULL;
 
 static spi_device_handle_t spi_handle;
+static bool spi_bus_initialized = false;
+static bool spi_bus_owned = false;
+
+#ifndef CONFIG_MM_SPI_CLOCK_MHZ
+#define CONFIG_MM_SPI_CLOCK_MHZ 40
+#endif
+#define MM_SPI_CLOCK_HZ (CONFIG_MM_SPI_CLOCK_MHZ * 1000000)
 
 static void wlan_hal_gpio_init(void)
 {
@@ -56,6 +66,11 @@ static void wlan_hal_gpio_init(void)
 
 static void wlan_hal_spi_init(void)
 {
+    if (spi_handle != NULL)
+    {
+        return;
+    }
+
     esp_err_t ret;
 
     spi_bus_config_t buscfg = {
@@ -70,15 +85,26 @@ static void wlan_hal_spi_init(void)
         .flags = SPICOMMON_BUSFLAG_MASTER,
     };
     ret = spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO);
-    if (ret != ESP_OK)
+    if (ret == ESP_OK)
+    {
+        spi_bus_initialized = true;
+        spi_bus_owned = true;
+    }
+    else if (ret == ESP_ERR_INVALID_STATE)
+    {
+        spi_bus_initialized = true;
+        spi_bus_owned = false;
+    }
+    else
     {
         printf("spi_bus_initialize failed\n");
+        return;
     }
 
     /* Selected the highest available SPI clock speed that is still below the MM6108's maximum of
-     * 50MHz */
+     * 50MHz. This is configurable via CONFIG_MM_SPI_CLOCK_MHZ for stability tuning. */
     spi_device_interface_config_t dev_cfg = {
-        .clock_speed_hz = SPI_MASTER_FREQ_40M,
+        .clock_speed_hz = MM_SPI_CLOCK_HZ,
         .mode = 0,
         .spics_io_num = -1,
         .queue_size = 1,
@@ -87,6 +113,13 @@ static void wlan_hal_spi_init(void)
     if (ret != ESP_OK)
     {
         printf("spi_bus_add_device failed\n");
+        if (spi_bus_owned)
+        {
+            (void)spi_bus_free(SPI2_HOST);
+            spi_bus_initialized = false;
+            spi_bus_owned = false;
+        }
+        return;
     }
 
     /* The actual clock frequency may not be the one that was set as it is re-calculated by the
@@ -94,21 +127,32 @@ static void wlan_hal_spi_init(void)
      * the value set. */
     int actual_freq_khz = 0;
     spi_device_get_actual_freq(spi_handle, &actual_freq_khz);
+    printf("Configured SPI CLK %dMHz\n", CONFIG_MM_SPI_CLOCK_MHZ);
     printf("Actual SPI CLK %dkHz\n", actual_freq_khz);
 }
 
 static void wlan_hal_spi_deinit(void)
 {
-    esp_err_t ret = spi_bus_remove_device(spi_handle);
-    if (ret != ESP_OK)
-    {
-        printf("spi_bus_remove_device failed\n");
+    if (spi_handle != NULL) {
+        esp_err_t ret = spi_bus_remove_device(spi_handle);
+        if (ret != ESP_OK)
+        {
+            printf("spi_bus_remove_device failed\n");
+        }
+        spi_handle = NULL;
     }
 
-    ret = spi_bus_free(SPI2_HOST);
-    if (ret != ESP_OK)
-    {
-        printf("spi_bus_initialize failed\n");
+    if (spi_bus_initialized) {
+        if (spi_bus_owned)
+        {
+            esp_err_t ret = spi_bus_free(SPI2_HOST);
+            if (ret != ESP_OK)
+            {
+                printf("spi_bus_free failed\n");
+            }
+        }
+        spi_bus_initialized = false;
+        spi_bus_owned = false;
     }
 }
 
@@ -228,10 +272,17 @@ void mmhal_wlan_set_spi_irq_enabled(bool enabled)
 
 void mmhal_wlan_init(void)
 {
+    int64_t t0 = esp_timer_get_time();
+    ESP_LOGI(WLAN_HAL_TAG, ">>> mmhal_wlan_init START");
     wlan_hal_gpio_init();
+    int64_t t1 = esp_timer_get_time();
     wlan_hal_spi_init();
+    int64_t t2 = esp_timer_get_time();
     /* Raise the RESET_N line to enable the WLAN transceiver. */
     gpio_set_level(CONFIG_MM_RESET_N, 1);
+    ESP_LOGI(WLAN_HAL_TAG, "  wlan_gpio_init: %lld ms, wlan_spi_init: %lld ms",
+             (t1 - t0) / 1000, (t2 - t1) / 1000);
+    ESP_LOGI(WLAN_HAL_TAG, "<<< mmhal_wlan_init END (%lld ms)", (esp_timer_get_time() - t0) / 1000);
 }
 
 void mmhal_wlan_deinit(void)

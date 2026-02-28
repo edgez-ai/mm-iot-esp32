@@ -43,6 +43,14 @@ menu "Morse Micro Shim Configuration"
         help
             SPI chip select pin.
 
+    config MM_SPI_CLOCK_MHZ
+        int "SPI clock for MM chip (MHz)"
+        range 5 40
+        default 40
+        help
+            SPI clock used for host-to-Morse-Micro transport.
+            If you see morse_pageset_tx write failures/timeouts, try reducing to 20 MHz.
+
     config MM_SPI_IRQ
         int "SPI IRQ pin for MM chip"
         default 5

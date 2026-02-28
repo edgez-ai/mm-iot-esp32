@@ -15,6 +15,16 @@
 #include "lwip/snmp.h"
 #endif
 
+#ifndef MMIPAL_TIMING_LOG
+#define MMIPAL_TIMING_LOG 0
+#endif
+
+#if MMIPAL_TIMING_LOG
+#define MMIPAL_TIMING_PRINTF(...) printf(__VA_ARGS__)
+#else
+#define MMIPAL_TIMING_PRINTF(...) do {} while (0)
+#endif
+
 struct netif_state
 {
     volatile uint8_t tx_qos_tid;
@@ -93,6 +103,13 @@ static void mmnetif_link_state(enum mmwlan_link_state link_state, void *arg)
 {
     struct netif *netif = (struct netif *)arg;
     LWIP_ASSERT("arg NULL", netif != NULL);
+#if MMIPAL_TIMING_LOG
+    uint32_t now_ms = mmosal_get_time_ms();
+#endif
+
+    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmwlan link_state callback=%s at %lu ms\n",
+                         (link_state == MMWLAN_LINK_UP) ? "UP" : "DOWN",
+                         (unsigned long)now_ms);
 
     LOCK_TCPIP_CORE();
     if (link_state == MMWLAN_LINK_DOWN)
@@ -161,6 +178,9 @@ static err_t mmnetif_tx(struct netif *netif, struct pbuf *p)
 
 err_t mmnetif_init(struct netif *netif)
 {
+#if MMIPAL_TIMING_LOG
+    uint32_t init_start_ms = mmosal_get_time_ms();
+#endif
     static bool initialised = false;
     if (initialised)
     {
@@ -178,8 +198,14 @@ err_t mmnetif_init(struct netif *netif)
     enum mmwlan_status status;
 
     /* Boot the transceiver so that we can read the MAC address. */
+#if MMIPAL_TIMING_LOG
+    uint32_t boot_start_ms = mmosal_get_time_ms();
+#endif
     struct mmwlan_boot_args boot_args = MMWLAN_BOOT_ARGS_INIT;
     status = mmwlan_boot(&boot_args);
+    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmwlan_boot status=%d duration=%lu ms\n",
+                         (int)status,
+                         (unsigned long)(mmosal_get_time_ms() - boot_start_ms));
     if (status != MMWLAN_SUCCESS)
     {
         LWIP_DEBUGF(NETIF_DEBUG | LWIP_DBG_LEVEL_SEVERE,
@@ -190,6 +216,7 @@ err_t mmnetif_init(struct netif *netif)
     /* Set MAC hardware address */
     netif->hwaddr_len = MMWLAN_MAC_ADDR_LEN;
     status = mmwlan_get_mac_addr(netif->hwaddr);
+    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmwlan_get_mac_addr status=%d\n", (int)status);
     MMOSAL_ASSERT(status == MMWLAN_SUCCESS);
 
     netif->mtu = 1500;
@@ -217,8 +244,10 @@ err_t mmnetif_init(struct netif *netif)
     netif->state = state;
 
     status = mmwlan_register_rx_pkt_cb(mmnetif_rx, netif);
+    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmwlan_register_rx_pkt_cb status=%d\n", (int)status);
     MMOSAL_ASSERT(status == MMWLAN_SUCCESS);
     status = mmwlan_register_link_state_cb(mmnetif_link_state, netif);
+    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmwlan_register_link_state_cb status=%d\n", (int)status);
     MMOSAL_ASSERT(status == MMWLAN_SUCCESS);
 
     printf("Morse LwIP interface initialised. MAC address %02x:%02x:%02x:%02x:%02x:%02x\n",
@@ -226,6 +255,9 @@ err_t mmnetif_init(struct netif *netif)
            netif->hwaddr[3], netif->hwaddr[4], netif->hwaddr[5]);
 
     initialised = true;
+
+    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmnetif_init total duration=%lu ms\n",
+                         (unsigned long)(mmosal_get_time_ms() - init_start_ms));
 
     return ERR_OK;
 }
