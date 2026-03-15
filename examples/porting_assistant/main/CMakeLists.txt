@@ -5,4 +5,4 @@ set(src "src/porting_assistant.c"
         "src/test_wlan_io.c"
         "src/chip_cfg.c")
 
-idf_component_register(SRCS ${src} PRIV_REQUIRES driver morselib mm_shims)
+idf_component_register(SRCS ${src} PRIV_REQUIRES morselib mm_shims)

@@ -55,9 +55,12 @@ idf.py menuconfig
 ### Morse Micro Shim Configuration
 The configuration options are located in `(Top) → Component config → Morse Micro Shim Configuration`
 
-This components allows you to configure:
+The items that will need to be configured are:
+
 - The pins used to communicate with the Morse Micro chip
-- Board Configuration File (BCF) to link against
+- Board Configuration File (BCF) to use
+- Morse Micro Chip Firmware (FW) file to use
+- Chip type to use
 
 #### Board Configuration File
 The Board Configuration File (BCF) is a configuration file for the Morse Micro chip that provides
@@ -65,6 +68,15 @@ board-specific information and is required for the system to function properly. 
 modules are included in the MM-IoT-SDK package. These modules can be identified by the part numbers
 printed on their labels, which take the form MM6108-MFxxxxxx.
 
+#### MM8108 configuration
+By default the driver will be configured for a MM6108 chip. The following parameters will need to be
+adjusted to be able to communicate with a MM8108 chip (along with appropriate pinout changes).
+
+```
+CONFIG_MM_BCF_FILE="bcf_mf15457.mbin"
+CONFIG_MM_FW_FILE="mm8108b2-rl.mbin"
+CONFIG_MMHAL_CHIP_TYPE_MM8108=y
+```
 
 ## Build and Run Porting Assistant Test Application
 

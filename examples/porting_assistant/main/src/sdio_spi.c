@@ -6,7 +6,7 @@
 
 #include "porting_assistant.h"
 #include "sdio_spi.h"
-#include "mmhal.h"
+#include "mmhal_wlan.h"
 
 
 /* Series of defines used when writing to the MM chip */

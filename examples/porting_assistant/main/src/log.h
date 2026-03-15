@@ -10,7 +10,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "mmhal.h"
+#include "mmhal_os.h"
 #include "mmosal.h"
 
 #define ANSI_ESC_SGR(_n) "\033[" _n "m"

@@ -18,15 +18,15 @@
 
 #include <endian.h>
 #include <string.h>
-#include "mmhal.h"
+#include "mmhal_os.h"
 #include "mmosal.h"
 #include "mmwlan.h"
-#include "mm_app_regdb.h"
+#include "mmregdb.h"
 
 // #define COUNTRY_CODE "AU"
 #ifndef COUNTRY_CODE
 #error COUNTRY_CODE must be defined to the appropriate 2 character country code. \
-       See mm_app_regdb.c for valid options.
+       See mmregdb.c for valid options.
 #endif
 
 /** SSID of the AP to connect to. */
@@ -103,6 +103,7 @@ void app_print_version_info(void)
 
     printf("-----------------------------------\n");
 
+    printf("  HW Version:              %s\n", CONFIG_IDF_TARGET);
     status = mmwlan_get_bcf_metadata(&bcf_metadata);
     if (status == MMWLAN_SUCCESS)
     {

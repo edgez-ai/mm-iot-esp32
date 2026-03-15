@@ -63,11 +63,6 @@ menu "Morse Micro Shim Configuration"
         default "bcf_mf08651_us.mbin"
         help
             Set the name of the BCF (Board Configuration File) to use.
-            Example valid filenames include:
-              - bcf_mf08651_us.mbin
-              - bcf_mf08551.mbin
-              - bcf_mf08251.mbin
-              - bcf_mf03120.mbin
 
             This file provides board-specific configuration data for the Morse Micro chip/module.
 
@@ -90,4 +85,16 @@ menu "Morse Micro Shim Configuration"
 
             If the file is not found in either location, a warning will be reported during
             configuration.
+
+    choice MMHAL_CHIP_TYPE
+        bool "MM Chip Ops"
+        default MMHAL_CHIP_TYPE_MM6108
+        help
+            This specifies which chip function ops should be used by morselib.
+
+        config MMHAL_CHIP_TYPE_MM6108
+            bool "mmhal_mm6108"
+        config MMHAL_CHIP_TYPE_MM8108
+            bool "mmhal_mm8108"
+    endchoice
 endmenu

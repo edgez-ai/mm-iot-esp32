@@ -5,7 +5,7 @@
  */
 
 #include <string.h>
-#include "mmhal.h"
+#include "mmhal_os.h"
 #include "mmosal.h"
 #include "mmwlan.h"
 #include "mmipal.h"
@@ -74,6 +74,7 @@ void app_print_version_info(void)
 
     printf("-----------------------------------\n");
 
+    printf("  HW Version:              %s\n", CONFIG_IDF_TARGET);
     status = mmwlan_get_bcf_metadata(&bcf_metadata);
     if (status == MMWLAN_SUCCESS)
     {

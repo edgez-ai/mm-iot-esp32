@@ -9,3 +9,5 @@ dependencies:
     path: $MMIOT_ROOT/framework/src/mmipal
   mmiperf:
     path: $MMIOT_ROOT/framework/src/mmiperf
+  mmregdb:
+    path: $MMIOT_ROOT/framework/src/mmregdb

@@ -25,6 +25,8 @@
  */
 
 #include "porting_assistant.h"
+#include "mmhal_core.h"
+#include "mmhal_os.h"
 
 #if defined(ENABLE_EXT_XTAL_INIT) && ENABLE_EXT_XTAL_INIT
 /* The crystal initialization requires chip specific configuration which we do not have access

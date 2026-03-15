@@ -72,7 +72,7 @@
 
 #include <endian.h>
 #include <string.h>
-#include "mmhal.h"
+#include "mmhal_os.h"
 #include "mmosal.h"
 #include "mmwlan.h"
 #include "mmipal.h"

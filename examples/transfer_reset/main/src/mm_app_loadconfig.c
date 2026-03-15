@@ -14,18 +14,18 @@
  * functions if none of the settings are available in config store.
  */
 
-#include "mmhal.h"
+#include "mmhal_os.h"
 #include "mmwlan.h"
 #include "mmipal.h"
 #include "mmosal.h"
 #include "mm_app_loadconfig.h"
-#include "mm_app_regdb.h"
+#include "mmregdb.h"
 
 
 // #define COUNTRY_CODE "AU"
 #ifndef COUNTRY_CODE
 #error COUNTRY_CODE must be defined to the appropriate 2 character country code. \
-       See mm_app_regdb.c for valid options.
+       See mmregdb.c for valid options.
 #endif
 
 #ifndef COUNTRY_CODE

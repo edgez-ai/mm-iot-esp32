@@ -5,14 +5,12 @@
  */
 
 #include "mmhal_wlan.h"
-#include "mmosal.h"
 
 /*
  * ---------------------------------------------------------------------------------------------
  *                                      BCF Retrieval
  * ---------------------------------------------------------------------------------------------
  */
-
 
 /*
  * The following implementation reads the BCF File from the config store.
@@ -40,7 +38,7 @@ void mmhal_wlan_read_bcf_file(uint32_t offset, uint32_t requested_len, struct mm
         return;
     }
 
-    robuf->buf = (uint8_t*)&bcf_binary_start + offset;
+    robuf->buf = (uint8_t *)&bcf_binary_start + offset;
     robuf->len = bcf_len - offset;
     robuf->len = (robuf->len < requested_len) ? robuf->len : requested_len;
 }

@@ -6,7 +6,7 @@
 
 #include "porting_assistant.h"
 #include "sdio_spi.h"
-#include "mmhal.h"
+#include "mmhal_wlan.h"
 #include "mmlog.h"
 #include "mmutils.h"
 #include "chip_cfg.h"
@@ -192,6 +192,7 @@ TEST_STEP(test_step_read_chip_id, "Read chip id from the MM chip")
             if (validate_chip_id(data, &chip_cfgs[chip_cfg_idx]))
             {
                 probed_chip_cfg = &chip_cfgs[chip_cfg_idx];
+                TEST_LOG_APPEND("\tChip ID: 0x%04lx\n\n", data);
                 return TEST_PASSED;
             }
             ret = MMHAL_SDIO_OTHER_ERROR;

@@ -1,4 +1,4 @@
-# Copyright 2025 Morse Micro
+# Copyright 2026 Morse Micro
 # SPDX-License-Identifier: Apache-2.0
 
 dependencies:
@@ -9,4 +9,5 @@ targets:
     - esp32s3
     - esp32c6
     - esp32c3
-version: "2.9.7-esp32"
+    - esp32p4
+version: "2.10.4-esp32"

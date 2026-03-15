@@ -13,7 +13,8 @@ CXX := "$(TOOLCHAIN_BASE)g++"
 OBJCOPY := $(TOOLCHAIN_BASE)objcopy
 AR := $(TOOLCHAIN_BASE)ar
 
-CFLAGS += -march=rv32imac_zicsr_zifence
+CFLAGS += -march=rv32imac_zicsr_zifencei
+CFLAGS += -mabi=ilp32
 
 # Include directories
 TOOLCHAIN_INCLUDES := "$(TOOLCHAIN_DIR)/include"
@@ -23,7 +24,7 @@ ARCH := riscv
 BFDNAME := elf32-littleriscv
 
 # Compiler flags
-CFLAGS := -Wall \
+CFLAGS += -Wall \
 		  -Wextra \
 		  -Werror \
 		  -Os \

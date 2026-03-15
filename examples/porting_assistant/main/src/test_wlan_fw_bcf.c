@@ -5,7 +5,7 @@
  */
 
 #include "porting_assistant.h"
-#include "mmhal.h"
+#include "mmhal_wlan.h"
 
 #ifndef PACKED
 #define PACKED __attribute__((packed))

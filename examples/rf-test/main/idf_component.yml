@@ -5,3 +5,5 @@ dependencies:
     path: $MMIOT_ROOT/framework/mm_shims
   slip:
     path: $MMIOT_ROOT/framework/src/slip
+  mmregdb:
+    path: $MMIOT_ROOT/framework/src/mmregdb

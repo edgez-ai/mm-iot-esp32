@@ -14,15 +14,15 @@
  */
 
 #include <string.h>
-#include "mmhal.h"
+#include "mmhal_os.h"
 #include "mmosal.h"
 #include "mmwlan.h"
-#include "mm_app_regdb.h"
+#include "mmregdb.h"
 
 // #define COUNTRY_CODE "AU"
 #ifndef COUNTRY_CODE
 #error COUNTRY_CODE must be defined to the appropriate 2 character country code. \
-       See mm_app_regdb.c for valid options.
+       See mmregdb.c for valid options.
 #endif
 
 /*
@@ -267,7 +267,8 @@ static void scan_rx_callback(const struct mmwlan_scan_result *result, void *arg)
     printf(ANSI_BOLD "%2d. %s" ANSI_RESET "\n", num_scan_results, ssid_str);
     printf("    Operating BW: %u MHz\n",  result->op_bw_mhz);
     printf("    BSSID: %s\n", bssid_str);
-    printf("    RSSI: %3d\n", result->rssi);
+    printf("    RSSI: %3d dBm\n", result->rssi);
+    printf("    Noise: %3d dBm\n", result->noise_dbm);
     printf("    Beacon Interval(TUs): %u\n", result->beacon_interval);
     printf("    Capability Info: 0x%04x\n", result->capability_info);
 
@@ -313,6 +314,7 @@ void app_print_version_info(void)
 
     printf("-----------------------------------\n");
 
+    printf("  HW Version:              %s\n", CONFIG_IDF_TARGET);
     status = mmwlan_get_bcf_metadata(&bcf_metadata);
     if (status == MMWLAN_SUCCESS)
     {
