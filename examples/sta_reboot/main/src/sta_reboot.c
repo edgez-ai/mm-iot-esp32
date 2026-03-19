@@ -37,6 +37,29 @@
 /** Delay before triggering another instance of the reboot iteration */
 #define REBOOT_DELAY_MS 50
 
+/** Fast reconnect cache persisted across WLAN reinit iterations. */
+struct fast_reconnect_cache
+{
+    bool valid;
+    uint8_t bssid[MMWLAN_MAC_ADDR_LEN];
+};
+
+static struct fast_reconnect_cache s_fast_reconnect_cache = {
+    .valid = false,
+    .bssid = { 0 },
+};
+
+static void print_bssid(const uint8_t *bssid)
+{
+    printf("%02x:%02x:%02x:%02x:%02x:%02x",
+           bssid[0],
+           bssid[1],
+           bssid[2],
+           bssid[3],
+           bssid[4],
+           bssid[5]);
+}
+
 /**
  * Link state callback. This is typically used to signal state to the network stack.
  */
@@ -148,6 +171,7 @@ static void reboot_iteration(struct mmosal_semb *link_up_semaphore)
     enum mmwlan_status status;
     struct mmwlan_sta_args sta_args = MMWLAN_STA_ARGS_INIT;
     uint8_t mac_addr[MMWLAN_MAC_ADDR_LEN];
+    uint8_t connected_bssid[MMWLAN_MAC_ADDR_LEN] = { 0 };
     bool ok;
 
     /* Boot the WLAN interface so that we can retrieve the firmware version. */
@@ -176,6 +200,18 @@ static void reboot_iteration(struct mmosal_semb *link_up_semaphore)
     sta_args.security_type = MMWLAN_OWE;
 #endif
 
+    /* Configure faster scan retries during (re)connection attempts. */
+    sta_args.scan_interval_base_s = 1;
+    sta_args.scan_interval_limit_s = 2;
+
+    if (s_fast_reconnect_cache.valid)
+    {
+        memcpy(sta_args.bssid, s_fast_reconnect_cache.bssid, sizeof(sta_args.bssid));
+        printf("Fast reconnect: using cached BSSID ");
+        print_bssid(sta_args.bssid);
+        printf("\n");
+    }
+
     printf("Attempting to connect to %s ", sta_args.ssid);
     if (sta_args.security_type == MMWLAN_SAE)
     {
@@ -194,6 +230,22 @@ static void reboot_iteration(struct mmosal_semb *link_up_semaphore)
     /* Wait until the link comes up. */
     ok = mmosal_semb_wait(link_up_semaphore, UINT32_MAX);
     MMOSAL_ASSERT(ok);
+
+    status = mmwlan_get_bssid(connected_bssid);
+    if (status == MMWLAN_SUCCESS)
+    {
+        memcpy(s_fast_reconnect_cache.bssid,
+               connected_bssid,
+               sizeof(s_fast_reconnect_cache.bssid));
+        s_fast_reconnect_cache.valid = true;
+        printf("Fast reconnect: cached BSSID ");
+        print_bssid(s_fast_reconnect_cache.bssid);
+        printf("\n");
+    }
+    else
+    {
+        printf("Fast reconnect: failed to read BSSID (status %d)\n", status);
+    }
 
     /* Send a packet. Note that this is just for demonstration purposes and normally this function
      * would be connected up to the IP stack (e.g., via a LWIP netif). */
