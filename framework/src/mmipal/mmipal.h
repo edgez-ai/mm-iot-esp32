@@ -217,6 +217,21 @@ struct mmipal_init_args
 enum mmipal_status mmipal_init(const struct mmipal_init_args *args);
 
 /**
+ * Initialize MMIPAL on top of an already-initialized LWIP instance.
+ *
+ * This variant must be used when LWIP/tcpip thread has already been initialized by
+ * another subsystem (for example esp_netif_init on ESP-IDF), to avoid calling
+ * tcpip_init() twice.
+ *
+ * It creates and configures the MMIPAL netif and callback wiring without reinitializing LWIP.
+ *
+ * @param args Initialization arguments.
+ *
+ * @return @c MMIPAL_SUCCESS on success.
+ */
+enum mmipal_status mmipal_init_on_existing_lwip(const struct mmipal_init_args *args);
+
+/**
  * Structure representing the current status of the link.
  */
 struct mmipal_link_status
@@ -276,6 +291,21 @@ typedef void (*mmipal_ext_link_status_cb_fn_t)(const struct mmipal_link_status *
  * @param arg Opaque argument to be passed to the callback.
  */
 void mmipal_set_ext_link_status_callback(mmipal_ext_link_status_cb_fn_t fn, void *arg);
+
+/**
+ * Re-hook the underlying IP stack callbacks used by MMIPAL after power-management recovery.
+ *
+ * For LWIP builds, this re-registers MMWLAN RX/link callbacks against the MM netif and
+ * reapplies lwIP link/status callbacks.
+ *
+ * This is useful after light sleep recovery paths where the WLAN callback registrations may
+ * have been reset but the MMIPAL netif still exists.
+ *
+ * @return @c MMIPAL_SUCCESS when callbacks were re-hooked successfully.
+ *         @c MMIPAL_NOT_SUPPORTED on non-LWIP backends.
+ *         @c MMIPAL_NO_LINK if MMIPAL netif is not initialized.
+ */
+enum mmipal_status mmipal_rehook_lwip_callbacks(void);
 
 /**
  * Get the total number of transmitted and received packets on the MMWLAN interface

@@ -176,6 +176,23 @@ static err_t mmnetif_tx(struct netif *netif, struct pbuf *p)
     return ERR_OK;
 }
 
+enum mmwlan_status mmnetif_register_callbacks(struct netif *netif)
+{
+    if (netif == NULL)
+    {
+        return MMWLAN_ERROR;
+    }
+
+    enum mmwlan_status status = mmwlan_register_rx_pkt_cb(mmnetif_rx, netif);
+    if (status != MMWLAN_SUCCESS)
+    {
+        return status;
+    }
+
+    status = mmwlan_register_link_state_cb(mmnetif_link_state, netif);
+    return status;
+}
+
 err_t mmnetif_init(struct netif *netif)
 {
 #if MMIPAL_TIMING_LOG
@@ -243,11 +260,8 @@ err_t mmnetif_init(struct netif *netif)
     state->tx_qos_tid = MMWLAN_TX_DEFAULT_QOS_TID;
     netif->state = state;
 
-    status = mmwlan_register_rx_pkt_cb(mmnetif_rx, netif);
-    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmwlan_register_rx_pkt_cb status=%d\n", (int)status);
-    MMOSAL_ASSERT(status == MMWLAN_SUCCESS);
-    status = mmwlan_register_link_state_cb(mmnetif_link_state, netif);
-    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmwlan_register_link_state_cb status=%d\n", (int)status);
+    status = mmnetif_register_callbacks(netif);
+    MMIPAL_TIMING_PRINTF("mmnetif_timing: mmnetif_register_callbacks status=%d\n", (int)status);
     MMOSAL_ASSERT(status == MMWLAN_SUCCESS);
 
     printf("Morse LwIP interface initialised. MAC address %02x:%02x:%02x:%02x:%02x:%02x\n",

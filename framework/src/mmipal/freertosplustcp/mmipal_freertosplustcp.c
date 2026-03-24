@@ -827,6 +827,17 @@ void mmipal_set_ext_link_status_callback(mmipal_ext_link_status_cb_fn_t fn, void
 #endif
 }
 
+enum mmipal_status mmipal_rehook_lwip_callbacks(void)
+{
+    return MMIPAL_NOT_SUPPORTED;
+}
+
+enum mmipal_status mmipal_init_on_existing_lwip(const struct mmipal_init_args *args)
+{
+    MM_UNUSED(args);
+    return MMIPAL_NOT_SUPPORTED;
+}
+
 enum mmipal_status mmipal_add_static_arp_entry(const struct mmipal_arp_config *config)
 {
     MM_UNUSED(config);

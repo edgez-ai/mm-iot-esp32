@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "mmwlan.h"
 #include "lwip/netif.h"
 #include "lwip/err.h"
 
@@ -16,6 +17,15 @@ extern "C"
 
 /** Initializer for the Morse Micro network interface */
 err_t mmnetif_init(struct netif *netif);
+
+/**
+ * Register MMWLAN RX and link-state callbacks for the provided lwIP netif.
+ *
+ * @param netif lwIP netif instance to bind callbacks against.
+ *
+ * @return MMWLAN_SUCCESS on success.
+ */
+enum mmwlan_status mmnetif_register_callbacks(struct netif *netif);
 
 /**
  * Configure the QoS TID for the @c netif. QoS data will be sent using this TID.

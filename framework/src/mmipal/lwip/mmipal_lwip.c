@@ -95,6 +95,7 @@ static void mmipal_log_netif_state(const char *reason, const struct netif *netif
     }
 
 #if LWIP_IPV4
+    unsigned dhcp_supplied = dhcp_supplied_address((struct netif *)netif) ? 1u : 0u;
     if (ipaddr_ntoa_r(&netif->ip_addr, ip, sizeof(ip)) == NULL)
     {
         strcpy(ip, "<err>");
@@ -108,12 +109,13 @@ static void mmipal_log_netif_state(const char *reason, const struct netif *netif
         strcpy(gateway, "<err>");
     }
 #else
+    unsigned dhcp_supplied = 0;
     strcpy(ip, "n/a");
     strcpy(netmask, "n/a");
     strcpy(gateway, "n/a");
 #endif
 
-    printf("mmipal: %s netif=%c%c%u flags=0x%02x link_up=%u netif_up=%u ip_link_state=%s ip=%s nm=%s gw=%s\n",
+    printf("mmipal: %s netif=%c%c%u flags=0x%02x link_up=%u netif_up=%u dhcp_supplied=%u ip_link_state=%s ip=%s nm=%s gw=%s\n",
            reason,
            netif->name[0],
            netif->name[1],
@@ -121,6 +123,7 @@ static void mmipal_log_netif_state(const char *reason, const struct netif *netif
            (unsigned)netif->flags,
            (unsigned)netif_is_link_up(netif),
            (unsigned)netif_is_up(netif),
+           dhcp_supplied,
            mmipal_link_state_to_str(ip_link_state),
            ip,
            netmask,
@@ -568,6 +571,34 @@ void mmipal_set_ext_link_status_callback(mmipal_ext_link_status_cb_fn_t fn, void
     data->ext_link_status_callback_arg = arg;
 }
 
+enum mmipal_status mmipal_rehook_lwip_callbacks(void)
+{
+    struct mmipal_data *data = mmipal_get_data();
+    struct netif *netif = &data->lwip_mmnetif;
+
+    if ((netif->name[0] == '\0') && (netif->name[1] == '\0'))
+    {
+        printf("mmipal: cannot rehook callbacks - netif not initialized\n");
+        return MMIPAL_NO_LINK;
+    }
+
+    enum mmwlan_status wlan_status = mmnetif_register_callbacks(netif);
+    if (wlan_status != MMWLAN_SUCCESS)
+    {
+        printf("mmipal: failed to rehook mmnetif callbacks: %d\n", (int)wlan_status);
+        return MMIPAL_NO_LINK;
+    }
+
+    LOCK_TCPIP_CORE();
+    netif_set_default(netif);
+    netif_set_link_callback(netif, netif_status_callback);
+    netif_set_status_callback(netif, netif_status_callback);
+    UNLOCK_TCPIP_CORE();
+
+    mmipal_log_netif_state("after mmipal_rehook_lwip_callbacks", netif, data->ip_link_state);
+    return MMIPAL_SUCCESS;
+}
+
 static volatile bool tcpip_init_done = false;
 
 struct lwip_init_args
@@ -579,6 +610,196 @@ struct lwip_init_args
     ip_addr_t gateway_addr;
     ip_addr_t ip6_addr;
 };
+
+struct mmipal_existing_lwip_attach_ctx
+{
+    struct lwip_init_args args;
+    enum mmipal_status status;
+};
+
+static void mmipal_attach_existing_lwip_handler(void *arg)
+{
+    struct mmipal_existing_lwip_attach_ctx *ctx =
+        (struct mmipal_existing_lwip_attach_ctx *)arg;
+    struct mmipal_data *data = mmipal_get_data();
+    struct netif *netif = &data->lwip_mmnetif;
+
+    if (ctx == NULL)
+    {
+        return;
+    }
+
+    ctx->status = MMIPAL_NO_LINK;
+
+    if ((netif->name[0] == '\0') && (netif->name[1] == '\0'))
+    {
+        struct netif *added = netif_add_noaddr(netif, NULL, mmnetif_init, tcpip_input);
+        if (added == NULL)
+        {
+            printf("mmipal: netif_add_noaddr failed when attaching to existing lwip\n");
+            return;
+        }
+
+        netif_set_default(netif);
+        netif_set_up(netif);
+    }
+
+#if LWIP_IPV4
+    data->ip4_mode = ctx->args.mode;
+    if (ctx->args.mode == MMIPAL_DHCP)
+    {
+        err_t dhcp_err = dhcp_start(netif);
+        if (dhcp_err != ERR_OK)
+        {
+            printf("mmipal: dhcp_start failed when attaching to existing lwip: %d\n",
+                   (int)dhcp_err);
+            return;
+        }
+    }
+    else if (ctx->args.mode == MMIPAL_STATIC)
+    {
+        netif_set_addr(netif, ip_2_ip4(&(ctx->args.ip_addr)),
+                       ip_2_ip4(&(ctx->args.netmask)), ip_2_ip4(&(ctx->args.gateway_addr)));
+    }
+#endif
+
+    netif_set_link_callback(netif, netif_status_callback);
+    netif_set_status_callback(netif, netif_status_callback);
+
+#if LWIP_IPV6
+    data->ip6_mode = ctx->args.ip6_mode;
+    if (ctx->args.ip6_mode == MMIPAL_IP6_STATIC)
+    {
+        netif_ip6_addr_set(netif, 0, ip_2_ip6(&(ctx->args.ip6_addr)));
+        netif_ip6_addr_set_state(netif, 0, IP6_ADDR_TENTATIVE);
+    }
+    else if (ctx->args.ip6_mode == MMIPAL_IP6_AUTOCONFIG)
+    {
+        netif_set_ip6_autoconfig_enabled(netif, 1);
+        netif_create_ip6_linklocal_address(netif, 1);
+    }
+#if LWIP_IPV6_DHCP6
+    else if (ctx->args.ip6_mode == MMIPAL_IP6_DHCP6_STATELESS)
+    {
+        err_t result6 = dhcp6_enable_stateless(netif);
+        if (result6 != ERR_OK)
+        {
+            printf("mmipal: dhcp6_enable_stateless failed when attaching to existing lwip: %d\n",
+                   (int)result6);
+            return;
+        }
+    }
+#endif
+#endif
+
+    mmipal_log_netif_state("after mmipal_init_on_existing_lwip", netif, data->ip_link_state);
+    ctx->status = MMIPAL_SUCCESS;
+}
+
+enum mmipal_status mmipal_init_on_existing_lwip(const struct mmipal_init_args *args)
+{
+    struct mmipal_data *data = mmipal_get_data();
+    int result;
+
+    if (args == NULL)
+    {
+        return MMIPAL_INVALID_ARGUMENT;
+    }
+
+    struct mmipal_existing_lwip_attach_ctx ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.args.mode = args->mode;
+    ctx.args.ip6_mode = args->ip6_mode;
+
+    data->offload_arp_response = args->offload_arp_response;
+    data->offload_arp_refresh_s = args->offload_arp_refresh_s;
+
+#if LWIP_IPV4
+    switch (args->mode)
+    {
+    case MMIPAL_DISABLED:
+        return MMIPAL_INVALID_ARGUMENT;
+
+    case MMIPAL_DHCP_OFFLOAD:
+    case MMIPAL_STATIC:
+        result = ipaddr_aton(args->ip_addr, &ctx.args.ip_addr);
+        if (!result)
+        {
+            return MMIPAL_INVALID_ARGUMENT;
+        }
+        result = ipaddr_aton(args->netmask, &ctx.args.netmask);
+        if (!result)
+        {
+            return MMIPAL_INVALID_ARGUMENT;
+        }
+        result = ipaddr_aton(args->gateway_addr, &ctx.args.gateway_addr);
+        if (!result)
+        {
+            return MMIPAL_INVALID_ARGUMENT;
+        }
+
+        if (ip_addr_isany_val(ctx.args.ip_addr))
+        {
+            return MMIPAL_INVALID_ARGUMENT;
+        }
+        break;
+
+    case MMIPAL_DHCP:
+        if (LWIP_DHCP == 0)
+        {
+            return MMIPAL_NOT_SUPPORTED;
+        }
+        break;
+
+    case MMIPAL_AUTOIP:
+        return MMIPAL_INVALID_ARGUMENT;
+    }
+#endif
+
+#if LWIP_IPV6
+    switch (args->ip6_mode)
+    {
+    case MMIPAL_IP6_DISABLED:
+        break;
+
+    case MMIPAL_IP6_STATIC:
+        result = ipaddr_aton(args->ip6_addr, &ctx.args.ip6_addr);
+        if (!result)
+        {
+            return MMIPAL_INVALID_ARGUMENT;
+        }
+        if (ip_addr_isany_val(ctx.args.ip6_addr))
+        {
+            return MMIPAL_INVALID_ARGUMENT;
+        }
+        break;
+
+    case MMIPAL_IP6_AUTOCONFIG:
+        if (LWIP_IPV6_AUTOCONFIG == 0)
+        {
+            return MMIPAL_NOT_SUPPORTED;
+        }
+        break;
+
+    case MMIPAL_IP6_DHCP6_STATELESS:
+        if (LWIP_IPV6_DHCP6_STATELESS == 0)
+        {
+            return MMIPAL_NOT_SUPPORTED;
+        }
+        break;
+    }
+#endif
+
+    err_t cb_err = tcpip_callback_with_block(mmipal_attach_existing_lwip_handler, &ctx, 1);
+    if (cb_err != ERR_OK)
+    {
+        printf("mmipal: tcpip_callback_with_block failed in mmipal_init_on_existing_lwip: %d\n",
+               (int)cb_err);
+        return MMIPAL_NO_LINK;
+    }
+
+    return ctx.status;
+}
 
 static void tcpip_init_done_handler(void *arg)
 {
@@ -951,3 +1172,4 @@ enum mmipal_status mmipal_get_dns_server(uint8_t index, mmipal_ip_addr_t addr)
         return MMIPAL_SUCCESS;
     }
 }
+
