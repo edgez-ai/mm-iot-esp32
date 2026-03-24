@@ -30,10 +30,14 @@ struct netif_state
     volatile uint8_t tx_qos_tid;
 };
 
+static struct netif_state s_mmnetif_state = {
+    .tx_qos_tid = MMWLAN_TX_DEFAULT_QOS_TID,
+};
+
 static struct netif_state *get_netif_state(struct netif *netif)
 {
-    MMOSAL_ASSERT(netif->state != NULL);
-    return (struct netif_state *)netif->state;
+    (void)netif;
+    return &s_mmnetif_state;
 }
 
 /** pbuf wrapper around an mmpkt. */
@@ -255,10 +259,8 @@ err_t mmnetif_init(struct netif *netif)
 #endif
     netif->linkoutput = mmnetif_tx;
 
-    struct netif_state *state = (struct netif_state *)mmosal_malloc(sizeof(*state));
-    MMOSAL_ASSERT(state != NULL);
-    state->tx_qos_tid = MMWLAN_TX_DEFAULT_QOS_TID;
-    netif->state = state;
+    s_mmnetif_state.tx_qos_tid = MMWLAN_TX_DEFAULT_QOS_TID;
+    netif->state = NULL;
 
     status = mmnetif_register_callbacks(netif);
     MMIPAL_TIMING_PRINTF("mmnetif_timing: mmnetif_register_callbacks status=%d\n", (int)status);
